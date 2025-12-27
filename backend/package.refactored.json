@@ -1,0 +1,36 @@
+{
+  "name": "encrypted-chat-backend",
+  "version": "1.0.0",
+  "description": "End-to-end encrypted chat application with blockchain integration",
+  "main": "server.refactored.js",
+  "scripts": {
+    "start": "node server.refactored.js",
+    "dev": "nodemon server.refactored.js",
+    "seed": "node seed.js",
+    "test": "jest --coverage",
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.js\""
+  },
+  "keywords": ["encryption", "chat", "blockchain", "websocket", "e2e"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "socket.io": "^4.6.0",
+    "mongoose": "^8.0.0",
+    "dotenv": "^16.3.1",
+    "ethers": "^6.9.0",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.1.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "eslint": "^8.55.0",
+    "prettier": "^3.1.1",
+    "jest": "^29.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}

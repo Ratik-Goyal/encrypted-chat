@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Encrypted Chat</title>
+</head>
+<body>
+
+<h2>Encrypted Chat App</h2>
+
+<label>Your ID:</label>
+<input id="myId" placeholder="Your wallet / username"><br><br>
+
+<label>Chat With:</label>
+<input id="toId" placeholder="Receiver ID"><br><br>
+
+<input id="message" placeholder="Type message">
+<button onclick="sendMessage()">Send</button>
+
+<pre id="chatBox"></pre>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
