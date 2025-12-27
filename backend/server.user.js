@@ -56,7 +56,11 @@ io.on("connection", (socket) => {
   });
 
   socket.on("get-online-users", () => {
-    socket.emit("online-users", []);
+    // Emit wallet addresses of all online users
+    const onlineWallets = Array.from(users.values())
+      .map(u => u.walletAddress)
+      .filter(Boolean);
+    socket.emit("online-users", onlineWallets);
   });
 
   socket.on("get-all-users", async () => {
@@ -116,8 +120,8 @@ io.on("connection", (socket) => {
       { upsert: true }
     );
 
+    // Try to deliver in real-time if recipient is online
     const targetSocketId = Array.from(users.entries()).find(([socketId, userData]) => userData.walletAddress === data.to)?.[0];
-    
     if (targetSocketId) {
       socket.to(targetSocketId).emit("receive-message", {
         from: data.from,
@@ -125,6 +129,7 @@ io.on("connection", (socket) => {
         timestamp: Date.now()
       });
     }
+    // No else needed: message is stored and will be delivered when user comes online and fetches conversation
   });
 
   socket.on("disconnect", async () => {

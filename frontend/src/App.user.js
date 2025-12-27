@@ -21,8 +21,6 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [typingUsers, setTypingUsers] = useState({});
   const [conversations, setConversations] = useState({});
-  const [selectedUserProfile, setSelectedUserProfile] = useState(null);
-  const [showProfileModal, setShowProfileModal] = useState(false);
   
   const config = modeConfig[MODE];
   const styles = getModeStyles(MODE);
@@ -37,31 +35,13 @@ function App() {
     socketRef.current = io('http://localhost:3000', {
       reconnection: true,
       reconnectionDelay: 1000,
-      reconnectionAttempts: 10,
-      reconnectionDelayMax: 5000,
-      transports: ['websocket', 'polling'],
-      forceNew: true
+      reconnectionAttempts: 5
     });
     
     const socket = socketRef.current;
     generateKeys();
 
-    socket.on('connect', () => {
-      console.log('✅ Socket connected:', socket.id);
-    });
-
-    socket.on('connect_error', (error) => {
-      console.error('❌ Connection error:', error);
-    });
-
-    socket.on('disconnect', (reason) => {
-      console.warn('⚠️ Socket disconnected:', reason);
-    });
-
-    socket.on('your-id', (id) => {
-      console.log('📍 Received ID:', id);
-      setMyId(id);
-    });
+    socket.on('your-id', (id) => setMyId(id));
 
     socket.on('receive-message', async (data) => {
       const decrypted = await decryptMessage(data.encrypted);
@@ -86,8 +66,8 @@ function App() {
       }
     });
 
-    socket.on('online-users', (users) => setOnlineUsers(users.filter(u => u !== myId)));
-    socket.on('all-users', (users) => setAllUsers(users.filter(u => u !== myId)));
+    socket.on('online-users', (users) => setOnlineUsers(users.filter(u => u !== socketRef.current?.id)));
+    socket.on('all-users', (users) => setAllUsers(users.filter(u => u !== socketRef.current?.id)));
     socket.on('user-profiles', (profiles) => setUserProfiles(profiles));
     socket.on('typing', ({ userId }) => {
       setTypingUsers(prev => ({ ...prev, [userId]: true }));
@@ -97,7 +77,7 @@ function App() {
     socket.on('conversation-history', async (msgs) => {
       const decrypted = await Promise.all(
         msgs.map(async (m) => ({
-          from: m.from === myId ? 'You' : m.from,
+          from: m.from === socketRef.current?.id ? 'You' : m.from,
           text: await decryptMessage(m.encrypted),
           timestamp: m.timestamp
         }))
@@ -105,17 +85,10 @@ function App() {
       setMessages(decrypted);
     });
 
-    socket.on('user-profile', (data) => {
-      if (data.success) {
-        setSelectedUserProfile(data.profile);
-        setShowProfileModal(true);
-      }
-    });
-
     return () => {
       socket.disconnect();
     };
-  }, [myId]);
+  }, []);
 
   const generateKeys = async () => {
     keyPairRef.current = await crypto.subtle.generateKey(
@@ -127,10 +100,7 @@ function App() {
   };
 
   const registerUser = () => {
-    if (!username || !email) return alert('Please fill all fields');
-    if (!socketRef.current || !socketRef.current.connected) {
-      return alert('Connecting to server... please wait');
-    }
+    if (!myId || !username || !email) return alert('Please fill all fields');
     socketRef.current.emit('register-user', {
       walletAddress: myId,
       publicKey: publicKeyBase64Ref.current,
@@ -153,11 +123,6 @@ function App() {
   };
 
   const encryptMessage = async (text) => {
-    if (!receiverPublicKeyRef.current) {
-      // Fallback: send plain text if we can't encrypt
-      console.warn('No receiver public key available, sending unencrypted');
-      return new TextEncoder().encode(text);
-    }
     const encrypted = await crypto.subtle.encrypt(
       { name: 'RSA-OAEP' }, receiverPublicKeyRef.current, new TextEncoder().encode(text)
     );
@@ -174,16 +139,14 @@ function App() {
   const sendMessage = async () => {
     if (!message.trim() || !recipientId || !registered) return;
     try {
-      // Try to get receiver's public key if we don't have it
       if (!receiverPublicKeyRef.current) {
         try {
           await fetchReceiverKey(recipientId);
-        } catch (keyError) {
-          console.warn('Could not fetch receiver key, attempting without encryption:', keyError);
-          // Continue anyway - send unencrypted or with local encryption
+        } catch (err) {
+          alert('Recipient has never registered. They must sign up at least once before you can send them a message.');
+          return;
         }
       }
-      
       const encrypted = await encryptMessage(message);
       const newMsg = { from: 'You', text: message, timestamp: Date.now() };
       socketRef.current.emit('send-message', { from: myId, to: recipientId, encrypted });
@@ -194,8 +157,7 @@ function App() {
       }));
       setMessage('');
     } catch (error) {
-      console.error('Message send error:', error);
-      alert('Failed to send message: ' + (error.message || 'Unknown error'));
+      alert('Failed to send message');
     }
   };
 
@@ -206,10 +168,6 @@ function App() {
     try {
       await fetchReceiverKey(userId);
     } catch (error) {}
-  };
-
-  const viewUserProfile = (userId) => {
-    socketRef.current.emit('get-user-profile', userId);
   };
 
   const getUserDisplay = (userId) => {
@@ -293,8 +251,8 @@ function App() {
         {recipientId ? (
           <>
             <div className="chat-header">
-              <div className="chat-header-avatar" onClick={() => viewUserProfile(recipientId)} style={{cursor: 'pointer'}}>👤</div>
-              <div className="chat-header-info" onClick={() => viewUserProfile(recipientId)} style={{cursor: 'pointer'}}>
+              <div className="chat-header-avatar">👤</div>
+              <div className="chat-header-info">
                 <h3>{getUserDisplay(recipientId)}</h3>
                 <p>{typingUsers[recipientId] ? 'typing...' : onlineUsers.includes(recipientId) ? 'online' : 'offline'}</p>
               </div>
@@ -331,25 +289,6 @@ function App() {
           </div>
         )}
       </div>
-
-      {showProfileModal && selectedUserProfile && (
-        <div className="modal-overlay" onClick={() => setShowProfileModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>User Profile</h2>
-              <button className="close-btn" onClick={() => setShowProfileModal(false)}>✕</button>
-            </div>
-            <div className="modal-body">
-              <div className="profile-avatar">👤</div>
-              <div className="profile-info">
-                <p><strong>Username:</strong> {selectedUserProfile.username}</p>
-                <p><strong>Email:</strong> {selectedUserProfile.email}</p>
-                <p><strong>Wallet:</strong> {selectedUserProfile.walletAddress?.slice(0, 10)}...</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

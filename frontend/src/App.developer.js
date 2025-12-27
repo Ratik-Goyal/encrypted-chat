@@ -19,55 +19,43 @@ function App() {
   const styles = getModeStyles(MODE);
 
   useEffect(() => {
-    socketRef.current = io('http://localhost:3000');
+    socketRef.current = io('http://localhost:4000');
     const socket = socketRef.current;
 
     socket.on('connect', () => {
-      console.log('✅ Developer connected to backend');
-    });
-
-    socket.on('disconnect', () => {
-      console.log('❌ Developer disconnected from backend');
-    });
-
-    socket.on('your-id', (id) => {
-      console.log('🆔 Developer ID:', id);
-      setMyId(id);
-    });
-
-    socket.on('blockchain-data', (data) => {
-      console.log('📦 Blockchain data received:', data);
-      setBlockchainMessages(prev => [...prev, data]);
-      setStats(prev => ({ ...prev, totalMessages: prev.totalMessages + 1 }));
-    });
-
-    socket.on('online-users', (users) => {
-      console.log('👥 Online users:', users);
-      setStats(prev => ({ ...prev, onlineUsers: users.length }));
-    });
-
-    socket.on('all-users', (users) => {
-      console.log('📋 All users:', users);
-      setAllUsers(users);
-      setStats(prev => ({ ...prev, totalUsers: users.length }));
-    });
-
-    socket.on('user-profiles', (profiles) => {
-      console.log('👤 User profiles:', profiles);
-      setUserProfiles(profiles);
-    });
-
-    socket.on('error', (error) => {
-      console.error('❌ Socket error:', error);
-    });
-
-    // Request initial data
-    setTimeout(() => {
-      console.log('📡 Requesting initial data...');
+      console.log('✅ Developer dashboard connected');
+      // Request initial data
       socket.emit('get-online-users');
       socket.emit('get-all-users');
       socket.emit('get-user-profiles');
-    }, 500);
+      socket.emit('get-blockchain-logs');
+      socket.emit('get-stats');
+    });
+
+    socket.on('your-id', (id) => setMyId(id));
+    
+    socket.on('blockchain-data', (data) => {
+      console.log('⛓️ New blockchain record:', data);
+      setBlockchainMessages(prev => [data, ...prev]);
+    });
+    
+    socket.on('blockchain-logs', (logs) => {
+      console.log('📦 Loaded blockchain logs:', logs.length);
+      setBlockchainMessages([...logs].reverse());
+    });
+    
+    socket.on('stats', (newStats) => {
+      setStats(newStats);
+    });
+    
+    socket.on('online-users', (users) => {
+      setStats(prev => ({ ...prev, onlineUsers: users.length }));
+    });
+    socket.on('all-users', (users) => {
+      setAllUsers(users);
+      setStats(prev => ({ ...prev, totalUsers: users.length }));
+    });
+    socket.on('user-profiles', (profiles) => setUserProfiles(profiles));
 
     return () => socket.disconnect();
   }, []);
@@ -134,12 +122,21 @@ function App() {
                 >
                   <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px'}}>
                     <div style={{color: '#00a884', fontSize: '14px', fontWeight: 'bold'}}>
-                      Block #{blockchainMessages.length - i}
+                      ⛓️ Block #{msg.id || (blockchainMessages.length - i)}
                     </div>
                     <div style={{color: '#8696a0', fontSize: '12px'}}>
                       {new Date(msg.timestamp).toLocaleString()}
                     </div>
                   </div>
+                  
+                  {msg.txHash && (
+                    <div style={{marginBottom: '10px', padding: '8px', background: '#000', borderRadius: '5px'}}>
+                      <div style={{color: '#8696a0', fontSize: '10px'}}>TX HASH</div>
+                      <div style={{color: '#00a884', fontSize: '11px', fontFamily: 'Courier New', wordBreak: 'break-all'}}>
+                        {msg.txHash}
+                      </div>
+                    </div>
+                  )}
                   
                   <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px'}}>
                     <div>

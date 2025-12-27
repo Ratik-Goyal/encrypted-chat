@@ -29,8 +29,10 @@ const io = new Server(4000, {
 console.log("✅ Developer Backend running on port 4000");
 
 const users = new Map();
+const blockchainLogs = []; // Store all blockchain activity logs
+
 io.on("connection", (socket) => {
-  console.log("🔌 User connected:", socket.id);
+  console.log("🔌 Developer connected:", socket.id);
   
   socket.on("error", (error) => {
     console.error("❌ Socket error:", error);
@@ -93,6 +95,34 @@ io.on("connection", (socket) => {
     socket.emit("user-profiles", profiles);
   });
 
+  // Get all blockchain logs
+  socket.on("get-blockchain-logs", () => {
+    socket.emit("blockchain-logs", blockchainLogs);
+  });
+
+  // Get all messages from database
+  socket.on("get-all-messages", async () => {
+    try {
+      const messages = await Message.find({}).sort({ createdAt: -1 }).limit(100);
+      socket.emit("all-messages", messages);
+    } catch (error) {
+      console.error("❌ Error fetching messages:", error);
+      socket.emit("all-messages", []);
+    }
+  });
+
+  // Get stats
+  socket.on("get-stats", async () => {
+    try {
+      const totalMessages = await Message.countDocuments();
+      const totalUsers = await User.countDocuments();
+      const onlineUsers = Array.from(users.values()).filter(u => u.walletAddress).length;
+      socket.emit("stats", { totalMessages, totalUsers, onlineUsers });
+    } catch (error) {
+      socket.emit("stats", { totalMessages: 0, totalUsers: 0, onlineUsers: 0 });
+    }
+  });
+
   socket.on("typing", ({ to }) => {
     const targetSocketId = Array.from(users.entries()).find(([socketId, userData]) => userData.walletAddress === to)?.[0];
     if (targetSocketId) {
@@ -124,27 +154,32 @@ io.on("connection", (socket) => {
       { upsert: true }
     );
     
-    console.log("📩 Encrypted message from", data.from, "to", data.to);
-    console.log("🔒 Encrypted data (visible to devs):", data.encrypted.slice(0, 50), "...");
-
-    socket.emit('blockchain-data', {
+    // Create blockchain log entry
+    const blockchainLog = {
+      id: blockchainLogs.length + 1,
+      type: 'MESSAGE_STORED',
       from: data.from,
       to: data.to,
       encrypted: data.encrypted,
-      timestamp: Date.now()
-    });
+      encryptedPreview: JSON.stringify(data.encrypted).slice(0, 100) + '...',
+      timestamp: Date.now(),
+      txHash: '0x' + Buffer.from(JSON.stringify(data.encrypted).slice(0, 32)).toString('hex')
+    };
+    
+    blockchainLogs.push(blockchainLog);
+    
+    console.log("📩 Encrypted message from", data.from, "to", data.to);
+    console.log("🔒 Encrypted data (visible to devs):", JSON.stringify(data.encrypted).slice(0, 50), "...");
+    console.log("⛓️  Blockchain log created:", blockchainLog.id);
+
+    // Broadcast to ALL connected developer clients
+    io.emit('blockchain-data', blockchainLog);
 
     const targetSocketId = Array.from(users.entries()).find(([socketId, userData]) => userData.walletAddress === data.to)?.[0];
     
     if (targetSocketId) {
       socket.to(targetSocketId).emit("receive-message", {
         from: data.from,
-        encrypted: data.encrypted,
-        timestamp: Date.now()
-      });
-      socket.to(targetSocketId).emit('blockchain-data', {
-        from: data.from,
-        to: data.to,
         encrypted: data.encrypted,
         timestamp: Date.now()
       });
