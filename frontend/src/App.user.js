@@ -7,7 +7,8 @@ import './App.css';
 const MODE = 'user';
 
 function App() {
-  const [myId, setMyId] = useState('');
+  const [myId, setMyId] = useState(''); // Socket ID
+  const [myWalletAddress, setMyWalletAddress] = useState(''); // Wallet address for messaging
   const [recipientId, setRecipientId] = useState('');
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
@@ -30,9 +31,11 @@ function App() {
   const receiverPublicKeyRef = useRef(null);
   const socketRef = useRef(null);
   const keyFetchPromises = useRef({});
+  const myWalletAddressRef = useRef('');
 
   useEffect(() => {
-    socketRef.current = io('http://localhost:3000', {
+    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+    socketRef.current = io(apiUrl, {
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5
@@ -66,23 +69,63 @@ function App() {
       }
     });
 
-    socket.on('online-users', (users) => setOnlineUsers(users.filter(u => u !== socketRef.current?.id)));
-    socket.on('all-users', (users) => setAllUsers(users.filter(u => u !== socketRef.current?.id)));
-    socket.on('user-profiles', (profiles) => setUserProfiles(profiles));
+    socket.on('online-users', (users) => {
+      // Filter out current user - users array contains wallet addresses
+      // Use ref to get current wallet address value
+      const currentWallet = myWalletAddressRef.current || socketRef.current?.id;
+      const filtered = users.filter(u => u !== currentWallet);
+      setOnlineUsers(filtered);
+    });
+    socket.on('all-users', (users) => {
+      // Filter out current user - users array contains wallet addresses
+      const currentWallet = myWalletAddressRef.current || socketRef.current?.id;
+      const filtered = users.filter(u => u !== currentWallet);
+      setAllUsers(filtered);
+    });
+    socket.on('user-profiles', (profiles) => {
+      console.log('📋 User profiles received:', Object.keys(profiles).length, 'profiles');
+      setUserProfiles(profiles);
+      // Refresh online users list to ensure usernames are displayed
+      socketRef.current.emit('get-online-users');
+    });
     socket.on('typing', ({ userId }) => {
       setTypingUsers(prev => ({ ...prev, [userId]: true }));
       setTimeout(() => setTypingUsers(prev => ({ ...prev, [userId]: false })), 3000);
     });
 
     socket.on('conversation-history', async (msgs) => {
-      const decrypted = await Promise.all(
-        msgs.map(async (m) => ({
-          from: m.from === socketRef.current?.id ? 'You' : m.from,
-          text: await decryptMessage(m.encrypted),
-          timestamp: m.timestamp
-        }))
-      );
-      setMessages(decrypted);
+      try {
+        const decrypted = await Promise.all(
+          msgs.map(async (m) => {
+            const isFromMe = m.from === myWalletAddress;
+            let text;
+            
+            if (isFromMe) {
+              // Messages sent by us - we can't decrypt them (they were encrypted with recipient's key)
+              // Check if we have it in our local conversations cache
+              const cachedMsg = conversations[m.to]?.find(msg => 
+                msg.timestamp === m.timestamp || 
+                (msg.from === 'You' && Math.abs(new Date(msg.timestamp) - new Date(m.timestamp)) < 1000)
+              );
+              text = cachedMsg?.text || '[Message you sent]';
+            } else {
+              // Messages sent to us - we can decrypt them with our private key
+              text = await decryptMessage(m.encrypted);
+            }
+            
+            return {
+              from: isFromMe ? 'You' : m.from,
+              text: text,
+              timestamp: m.timestamp
+            };
+          })
+        );
+        setMessages(decrypted);
+      } catch (error) {
+        console.error('Error loading conversation history:', error);
+        // Set empty messages on error
+        setMessages([]);
+      }
     });
 
     return () => {
@@ -101,17 +144,24 @@ function App() {
 
   const registerUser = () => {
     if (!myId || !username || !email) return alert('Please fill all fields');
+    // Use socket ID as wallet address (since we're not using actual wallet)
+    const walletAddress = myId;
+    setMyWalletAddress(walletAddress);
+    myWalletAddressRef.current = walletAddress; // Update ref as well
     socketRef.current.emit('register-user', {
-      walletAddress: myId,
+      walletAddress: walletAddress,
       publicKey: publicKeyBase64Ref.current,
       username,
       email
     });
     setRegistered(true);
     setShowLogin(false);
-    socketRef.current.emit('get-online-users');
-    socketRef.current.emit('get-all-users');
+    // Request user profiles first, then online users (with small delay to ensure profiles are saved)
     socketRef.current.emit('get-user-profiles');
+    setTimeout(() => {
+      socketRef.current.emit('get-online-users');
+      socketRef.current.emit('get-all-users');
+    }, 200);
   };
 
   const fetchReceiverKey = (receiverId) => {
@@ -130,10 +180,21 @@ function App() {
   };
 
   const decryptMessage = async (encrypted) => {
-    const decrypted = await crypto.subtle.decrypt(
-      { name: 'RSA-OAEP' }, keyPairRef.current.privateKey, new Uint8Array(encrypted)
-    );
-    return new TextDecoder().decode(decrypted);
+    try {
+      if (!keyPairRef.current?.privateKey) {
+        throw new Error('Private key not available');
+      }
+      if (!encrypted || !Array.isArray(encrypted) || encrypted.length === 0) {
+        throw new Error('Invalid encrypted data');
+      }
+      const decrypted = await crypto.subtle.decrypt(
+        { name: 'RSA-OAEP' }, keyPairRef.current.privateKey, new Uint8Array(encrypted)
+      );
+      return new TextDecoder().decode(decrypted);
+    } catch (error) {
+      console.error('Decryption error:', error);
+      return '[Unable to decrypt message]';
+    }
   };
 
   const sendMessage = async () => {
@@ -149,7 +210,7 @@ function App() {
       }
       const encrypted = await encryptMessage(message);
       const newMsg = { from: 'You', text: message, timestamp: Date.now() };
-      socketRef.current.emit('send-message', { from: myId, to: recipientId, encrypted });
+      socketRef.current.emit('send-message', { from: myWalletAddress, to: recipientId, encrypted });
       setMessages(prev => [...prev, newMsg]);
       setConversations(prev => ({
         ...prev,
@@ -164,7 +225,7 @@ function App() {
   const selectUser = async (userId) => {
     setRecipientId(userId);
     setMessages(conversations[userId] || []);
-    socketRef.current.emit('get-conversation', { user1: myId, user2: userId });
+    socketRef.current.emit('get-conversation', { user1: myWalletAddress, user2: userId });
     try {
       await fetchReceiverKey(userId);
     } catch (error) {}
@@ -172,7 +233,13 @@ function App() {
 
   const getUserDisplay = (userId) => {
     if (!userId) return 'Unknown';
-    return userProfiles[userId]?.username || userId.slice(0, 8) + '...';
+    // Check if userId is a wallet address and look it up in profiles
+    const profile = userProfiles[userId];
+    if (profile?.username) {
+      return profile.username;
+    }
+    // Fallback: show first 8 chars of wallet address
+    return userId.slice(0, 8) + '...';
   };
 
   const filteredOnlineUsers = onlineUsers.filter(u => {

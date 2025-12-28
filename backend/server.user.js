@@ -3,30 +3,44 @@ const Message = require("./message.model");
 const User = require("./models/User");
 const Conversation = require("./models/Conversation");
 const blockchainService = require("./blockchain.service");
+const config = require("./config");
 
-mongoose.connect(
-  "mongodb+srv://Ratik_Goyal:Ratikgoyal4647%26%26@cluster.iwpicqh.mongodb.net/?appName=Cluster"
-).then(() => {
-  console.log("🟢 MongoDB connected");
-  blockchainService.initialize().catch(err => {
-    console.log("⚠️ Blockchain not available, using DB only");
-  });
-}).catch(err => {
-  console.error("🔴 MongoDB error:", err.message);
+// Connection status tracking
+let mongoConnected = false;
+let blockchainReady = false;
+
+// Connect to MongoDB but don't block server startup
+const mongoUri = config.mongoUri || process.env.MONGODB_URI;
+if (!mongoUri) {
+  console.error("🔴 MONGODB_URI not set in environment variables!");
   console.log("⚠️ Server continuing without database...");
-});
+} else {
+  mongoose.connect(mongoUri).then(() => {
+    console.log("🟢 MongoDB connected");
+    mongoConnected = true;
+    blockchainService.initialize(config.blockchainRpc).catch(err => {
+      console.log("⚠️ Blockchain not available, using DB only");
+    }).then(() => {
+      blockchainReady = true;
+    });
+  }).catch(err => {
+    console.error("🔴 MongoDB error:", err.message);
+    console.log("⚠️ Server continuing without database...");
+    mongoConnected = false;
+  });
+}
 
 const { Server } = require("socket.io");
-const io = new Server(3000, {
+const io = new Server(config.port, {
   cors: {
-    origin: ["http://localhost:3001"],
+    origin: config.corsOrigin,
     methods: ["GET", "POST"]
   },
   pingInterval: 25000,
   pingTimeout: 60000
 });
 
-console.log("✅ User Backend running on port 3000");
+console.log(`✅ User Backend running on port ${config.port}`);
 
 const users = new Map();
 io.on("connection", (socket) => {

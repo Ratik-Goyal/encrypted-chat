@@ -4,6 +4,7 @@ const Message = require("./message.model");
 const User = require("./models/User");
 const Conversation = require("./models/Conversation");
 const blockchainService = require("./blockchain.service");
+const config = require("./config");
 
 const app = express();
 
@@ -12,26 +13,30 @@ let mongoConnected = false;
 let blockchainReady = false;
 
 // Connect to MongoDB but don't block server startup
-mongoose.connect(
-  "mongodb+srv://Ratik_Goyal:Ratikgoyal4647%26%26@cluster.iwpicqh.mongodb.net/?appName=Cluster"
-).then(() => {
-  console.log("🟢 MongoDB connected");
-  mongoConnected = true;
-  blockchainService.initialize().catch(err => {
-    console.log("⚠️ Blockchain not available, using DB only");
-  }).then(() => {
-    blockchainReady = true;
-  });
-}).catch(err => {
-  console.error("🔴 MongoDB error:", err.message);
+const mongoUri = config.mongoUri || process.env.MONGODB_URI;
+if (!mongoUri) {
+  console.error("🔴 MONGODB_URI not set in environment variables!");
   console.log("⚠️ Server continuing without database...");
-  mongoConnected = false;
-});
+} else {
+  mongoose.connect(mongoUri).then(() => {
+    console.log("🟢 MongoDB connected");
+    mongoConnected = true;
+    blockchainService.initialize(config.blockchainRpc).catch(err => {
+      console.log("⚠️ Blockchain not available, using DB only");
+    }).then(() => {
+      blockchainReady = true;
+    });
+  }).catch(err => {
+    console.error("🔴 MongoDB error:", err.message);
+    console.log("⚠️ Server continuing without database...");
+    mongoConnected = false;
+  });
+}
 
 const { Server } = require("socket.io");
-const io = new Server(3000, {
+const io = new Server(config.port, {
   cors: {
-    origin: ["http://localhost:3001", "http://localhost:3002", "http://192.168.29.41:3001", "http://192.168.29.41:3002", "http://localhost:3001", "http://192.168.29.41:3001"],
+    origin: config.corsOrigin,
     methods: ["GET", "POST"]
   },
   pingInterval: 25000,
@@ -56,11 +61,11 @@ app.get("/health", (req, res) => {
 });
 
 // Start Express server on port 3001 for HTTP endpoints
-app.listen(3001, () => {
-  console.log("✅ HTTP server running on port 3001");
+app.listen(config.httpPort, () => {
+  console.log(`✅ HTTP server running on port ${config.httpPort}`);
 });
 
-console.log("✅ Backend running on port 3000");
+console.log(`✅ Backend running on port ${config.port}`);
 
 const users = new Map();
 io.on("connection", (socket) => {
