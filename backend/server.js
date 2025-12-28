@@ -1,4 +1,5 @@
 const express = require("express");
+const http = require("http");
 const mongoose = require("mongoose");
 const Message = require("./message.model");
 const User = require("./models/User");
@@ -7,6 +8,7 @@ const blockchainService = require("./blockchain.service");
 const config = require("./config");
 
 const app = express();
+const httpServer = http.createServer(app);
 
 // Connection status tracking
 let mongoConnected = false;
@@ -33,17 +35,7 @@ if (!mongoUri) {
   });
 }
 
-const { Server } = require("socket.io");
-const io = new Server(config.port, {
-  cors: {
-    origin: config.corsOrigin,
-    methods: ["GET", "POST"]
-  },
-  pingInterval: 25000,
-  pingTimeout: 60000
-});
-
-// Health check endpoint
+// Health check endpoint (attached to Socket.IO server)
 app.get("/health", (req, res) => {
   const health = {
     status: "ok",
@@ -60,12 +52,21 @@ app.get("/health", (req, res) => {
   res.status(statusCode).json(health);
 });
 
-// Start Express server on port 3001 for HTTP endpoints
-app.listen(config.httpPort, () => {
-  console.log(`✅ HTTP server running on port ${config.httpPort}`);
+// Create Socket.IO server attached to the HTTP server
+const { Server } = require("socket.io");
+const io = new Server(httpServer, {
+  cors: {
+    origin: config.corsOrigin,
+    methods: ["GET", "POST"]
+  },
+  pingInterval: 25000,
+  pingTimeout: 60000
 });
 
-console.log(`✅ Backend running on port ${config.port}`);
+// Start the HTTP server (Socket.IO and Express both use this)
+httpServer.listen(config.port, () => {
+  console.log(`✅ Backend running on port ${config.port} (Socket.IO + HTTP)`);
+});
 
 const users = new Map();
 io.on("connection", (socket) => {

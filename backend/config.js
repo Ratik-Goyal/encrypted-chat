@@ -26,7 +26,6 @@ const parseCorsOrigin = (origin) => {
 
 module.exports = {
   port: parseInt(process.env.PORT || '3000', 10),
-  httpPort: parseInt(process.env.HTTP_PORT || '3001', 10),
   mongoUri: process.env.MONGODB_URI,
   nodeEnv: process.env.NODE_ENV || 'development',
   corsOrigin: parseCorsOrigin(process.env.CORS_ORIGIN),
