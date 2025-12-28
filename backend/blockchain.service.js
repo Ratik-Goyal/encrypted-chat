@@ -1,6 +1,7 @@
 const { ethers } = require('ethers');
+const config = require('./config');
 
-const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000';
+const CONTRACT_ADDRESS = config.contractAddress || process.env.CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000';
 const CONTRACT_ABI = [
   "function storeMessage(address _to, bytes memory _encryptedData) public returns (uint256)",
   "function getMessage(uint256 _messageId) public view returns (address from, address to, bytes memory encryptedData, uint256 timestamp, bytes32 messageHash)",
@@ -16,9 +17,10 @@ class BlockchainService {
     this.signer = null;
   }
 
-  async initialize(providerUrl = 'http://localhost:8545') {
+  async initialize(providerUrl = null) {
+    const rpcUrl = providerUrl || config.blockchainRpc || 'http://localhost:8545';
     try {
-      this.provider = new ethers.JsonRpcProvider(providerUrl);
+      this.provider = new ethers.JsonRpcProvider(rpcUrl);
       this.contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, this.provider);
       console.log('✅ Blockchain service initialized');
     } catch (error) {

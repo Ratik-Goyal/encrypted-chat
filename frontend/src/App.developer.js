@@ -19,7 +19,8 @@ function App() {
   const styles = getModeStyles(MODE);
 
   useEffect(() => {
-    socketRef.current = io('http://localhost:4000');
+    const apiUrl = process.env.REACT_APP_API_URL || process.env.REACT_APP_DEV_API_URL || 'http://localhost:3000';
+    socketRef.current = io(apiUrl);
     const socket = socketRef.current;
 
     socket.on('connect', () => {
@@ -63,7 +64,7 @@ function App() {
   const getUserDisplay = (userId) => userProfiles[userId]?.username || userId?.slice(0, 8) + '...';
 
   return (
-    <div style={{background: styles.background, minHeight: '100vh', color: styles.text, fontFamily: 'monospace'}}>
+    <div style={{background: styles.background, minHeight: '100vh', color: styles.text, fontFamily: 'monospace', overflow: 'auto'}}>
       {/* Header with mode indicator */}
       <div style={{background: styles.surface, padding: '20px', borderBottom: `3px solid ${styles.primary}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
         <div>
@@ -76,7 +77,7 @@ function App() {
       {/* Developer warning banner */}
       <ModeBanner mode={MODE} config={config} styles={styles} />
 
-      <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', padding: '20px'}}>
+      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', padding: '20px'}}>
         <div style={{background: styles.surface, padding: '20px', borderRadius: '10px', border: `2px solid ${styles.primary}`, boxShadow: `0 0 10px ${styles.primary}40`}}>
           <div style={{fontSize: '14px', color: styles.muted}}>Total Messages</div>
           <div style={{fontSize: '32px', color: styles.primary, fontWeight: 'bold'}}>{stats.totalMessages}</div>
@@ -105,7 +106,7 @@ function App() {
               <p style={{fontSize: '12px'}}>Messages will appear here in real-time</p>
             </div>
           ) : (
-            <div style={{maxHeight: '600px', overflowY: 'auto'}}>
+            <div style={{maxHeight: '600px', overflowY: 'auto', overflowX: 'hidden', paddingRight: '10px'}}>
               {blockchainMessages.map((msg, i) => (
                 <div 
                   key={i} 

@@ -13,8 +13,9 @@
   "scripts": {
     "start": "cross-env PORT=3001 react-scripts start",
     "start:user": "cross-env PORT=3001 react-scripts start",
-    "start:dev": "cross-env PORT=30001 REACT_APP_ENTRY=developer react-scripts start",
+    "start:dev": "cross-env PORT=3002 REACT_APP_ENTRY=developer react-scripts start",
     "start:developer": "cross-env PORT=4001 REACT_APP_ENTRY=developer react-scripts start",
+    "start:both": "concurrently \"npm run start:user\" \"npm run start:developer\"",
     "build": "react-scripts build",
     "build:dev": "cross-env REACT_APP_ENTRY=developer react-scripts build",
     "build:developer": "cross-env REACT_APP_ENTRY=developer react-scripts build",
@@ -37,6 +38,7 @@
     ]
   },
   "devDependencies": {
-    "cross-env": "^10.1.0"
+    "cross-env": "^10.1.0",
+    "concurrently": "^8.2.2"
   }
 }
