@@ -1,0 +1,168 @@
+/* Floating Particles Effect */
+.particles-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 168, 132, 0.4) 0%, rgba(6, 207, 156, 0.1) 100%);
+  animation: float linear infinite;
+  opacity: 0;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(100vh) translateX(0) rotate(0deg) scale(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  90% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(-10vh) translateX(var(--drift)) rotate(720deg) scale(0);
+    opacity: 0;
+  }
+}
+
+/* Individual particle variations */
+.particle:nth-child(1) {
+  left: 5%;
+  width: 3px;
+  height: 3px;
+  animation-duration: 15s;
+  animation-delay: 0s;
+  --drift: 20px;
+}
+
+.particle:nth-child(2) {
+  left: 15%;
+  width: 5px;
+  height: 5px;
+  animation-duration: 18s;
+  animation-delay: 2s;
+  --drift: -30px;
+}
+
+.particle:nth-child(3) {
+  left: 25%;
+  width: 2px;
+  height: 2px;
+  animation-duration: 12s;
+  animation-delay: 4s;
+  --drift: 15px;
+}
+
+.particle:nth-child(4) {
+  left: 35%;
+  width: 4px;
+  height: 4px;
+  animation-duration: 20s;
+  animation-delay: 1s;
+  --drift: -25px;
+}
+
+.particle:nth-child(5) {
+  left: 45%;
+  width: 3px;
+  height: 3px;
+  animation-duration: 16s;
+  animation-delay: 3s;
+  --drift: 35px;
+}
+
+.particle:nth-child(6) {
+  left: 55%;
+  width: 5px;
+  height: 5px;
+  animation-duration: 14s;
+  animation-delay: 5s;
+  --drift: -20px;
+}
+
+.particle:nth-child(7) {
+  left: 65%;
+  width: 2px;
+  height: 2px;
+  animation-duration: 19s;
+  animation-delay: 2.5s;
+  --drift: 25px;
+}
+
+.particle:nth-child(8) {
+  left: 75%;
+  width: 4px;
+  height: 4px;
+  animation-duration: 17s;
+  animation-delay: 4.5s;
+  --drift: -15px;
+}
+
+.particle:nth-child(9) {
+  left: 85%;
+  width: 3px;
+  height: 3px;
+  animation-duration: 13s;
+  animation-delay: 1.5s;
+  --drift: 30px;
+}
+
+.particle:nth-child(10) {
+  left: 95%;
+  width: 5px;
+  height: 5px;
+  animation-duration: 21s;
+  animation-delay: 3.5s;
+  --drift: -35px;
+}
+
+/* Ambient glow effect */
+.ambient-glow {
+  position: fixed;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 168, 132, 0.1) 0%, transparent 70%);
+  filter: blur(60px);
+  pointer-events: none;
+  animation: ambientMove 30s ease-in-out infinite;
+  z-index: 0;
+}
+
+.ambient-glow:nth-child(1) {
+  top: -200px;
+  left: -200px;
+}
+
+.ambient-glow:nth-child(2) {
+  bottom: -200px;
+  right: -200px;
+  animation-delay: 15s;
+  background: radial-gradient(circle, rgba(6, 207, 156, 0.08) 0%, transparent 70%);
+}
+
+@keyframes ambientMove {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(50px, -50px) scale(1.1);
+  }
+  50% {
+    transform: translate(-30px, 30px) scale(0.9);
+  }
+  75% {
+    transform: translate(40px, -40px) scale(1.05);
+  }
+}

@@ -5,7 +5,12 @@ const UserSchema = new mongoose.Schema({
   publicKey: { type: String, required: true },
   username: { type: String, required: true },
   email: { type: String, required: true },
-  lastSeen: { type: Date, default: Date.now }
+  userId: { type: String, index: true }, // Unique user identifier like @username_1234
+  lastSeen: { type: Date, default: Date.now },
+  profilePicture: { type: String, default: '' }, // URL or base64 data
+  status: { type: String, default: 'Hey there! I am using SecureChat' }, // Status message
+  bio: { type: String, default: '' },
+  isOnline: { type: Boolean, default: false }
 }, { timestamps: true });
 
 module.exports = mongoose.model("User", UserSchema);

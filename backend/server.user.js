@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const Message = require("./message.model");
 const User = require("./models/User");
 const Conversation = require("./models/Conversation");
-const blockchainService = require("./blockchain.service");
+const blockchainService = require("../blockchain/blockchain.service");
 const config = require("./config");
 
 // Connection status tracking
@@ -62,11 +62,28 @@ io.on("connection", (socket) => {
         publicKey: data.publicKey, 
         username: data.username,
         email: data.email,
-        lastSeen: new Date() 
+        lastSeen: new Date(),
+        isOnline: true
       },
       { upsert: true, new: true }
     );
     users.set(socket.id, { walletAddress: data.walletAddress, username: data.username });
+    
+    // Broadcast updated user profiles to all connected clients
+    const allUsers = await User.find({}, 'walletAddress username email profilePicture status bio lastSeen isOnline');
+    const profiles = {};
+    allUsers.forEach(u => {
+      profiles[u.walletAddress] = { 
+        username: u.username, 
+        email: u.email, 
+        profilePicture: u.profilePicture,
+        status: u.status,
+        bio: u.bio,
+        lastSeen: u.lastSeen,
+        isOnline: u.isOnline
+      };
+    });
+    io.emit("user-profiles", profiles);
   });
 
   socket.on("get-online-users", () => {
@@ -95,12 +112,58 @@ io.on("connection", (socket) => {
   });
 
   socket.on("get-user-profiles", async () => {
-    const allUsers = await User.find({}, 'walletAddress username email');
+    const allUsers = await User.find({}, 'walletAddress username email profilePicture status bio lastSeen isOnline');
     const profiles = {};
     allUsers.forEach(u => {
-      profiles[u.walletAddress] = { username: u.username, email: u.email };
+      profiles[u.walletAddress] = { 
+        username: u.username, 
+        email: u.email,
+        profilePicture: u.profilePicture,
+        status: u.status,
+        bio: u.bio,
+        lastSeen: u.lastSeen,
+        isOnline: u.isOnline
+      };
     });
     socket.emit("user-profiles", profiles);
+  });
+
+  socket.on("update-profile", async (data) => {
+    const updateFields = {};
+    if (data.profilePicture !== undefined) updateFields.profilePicture = data.profilePicture;
+    if (data.status !== undefined) updateFields.status = data.status;
+    if (data.bio !== undefined) updateFields.bio = data.bio;
+    if (data.username !== undefined) updateFields.username = data.username;
+
+    await User.findOneAndUpdate(
+      { walletAddress: data.walletAddress },
+      updateFields,
+      { new: true }
+    );
+
+    // Broadcast updated profiles to all clients
+    const allUsers = await User.find({}, 'walletAddress username email profilePicture status bio lastSeen isOnline');
+    const profiles = {};
+    allUsers.forEach(u => {
+      profiles[u.walletAddress] = { 
+        username: u.username, 
+        email: u.email,
+        profilePicture: u.profilePicture,
+        status: u.status,
+        bio: u.bio,
+        lastSeen: u.lastSeen,
+        isOnline: u.isOnline
+      };
+    });
+    io.emit("user-profiles", profiles);
+  });
+
+  socket.on("mark-message-read", async ({ messageId, walletAddress }) => {
+    await Message.findByIdAndUpdate(messageId, {
+      read: true,
+      readAt: new Date()
+    });
+    io.emit("message-read", { messageId, walletAddress });
   });
 
   socket.on("typing", ({ to }) => {

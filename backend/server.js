@@ -4,7 +4,7 @@ const mongoose = require("mongoose");
 const Message = require("./message.model");
 const User = require("./models/User");
 const Conversation = require("./models/Conversation");
-const blockchainService = require("./blockchain.service");
+const blockchainService = require("../blockchain/blockchain.service");
 const config = require("./config");
 
 const app = express();
@@ -83,6 +83,8 @@ io.on("connection", (socket) => {
   socket.emit("your-id", socket.id);
 
   socket.on("register-user", async (data) => {
+    console.log("📝 Registering user:", data.walletAddress, data.username);
+    
     await User.findOneAndUpdate(
       { walletAddress: data.walletAddress },
       { 
@@ -94,9 +96,30 @@ io.on("connection", (socket) => {
       { upsert: true, new: true }
     );
     users.set(socket.id, { walletAddress: data.walletAddress, username: data.username });
+    
+    // Build online users list
     const onlineUserIds = Array.from(users.values()).map(u => u.walletAddress).filter(Boolean);
+    console.log("🟢 Broadcasting online users:", onlineUserIds);
+    
+    // Broadcast to ALL connected clients including the newly registered one
     io.emit("online-users", onlineUserIds);
-    console.log("✅ User registered:", data.username, data.email);
+    
+    // Also send all-users list to everyone
+    const allUsersFromDb = await User.find({}).select('walletAddress');
+    const allUserIds = allUsersFromDb.map(u => u.walletAddress).filter(Boolean);
+    io.emit("all-users", allUserIds);
+    
+    // Send user profiles to everyone
+    const allProfiles = await User.find({}, 'walletAddress username email');
+    const profiles = {};
+    allProfiles.forEach(u => {
+      if (u.walletAddress) {
+        profiles[u.walletAddress] = { username: u.username, email: u.email };
+      }
+    });
+    io.emit("user-profiles", profiles);
+    
+    console.log("✅ User registered:", data.username, data.email, "- Total online:", onlineUserIds.length);
   });
 
   socket.on("get-online-users", () => {
@@ -142,6 +165,46 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("get-blockchain-logs", async () => {
+    try {
+      const messages = await Message.find({})
+        .sort({ timestamp: -1 })
+        .limit(100);
+      
+      const logs = messages.map(msg => ({
+        id: msg._id,
+        from: msg.from,
+        to: msg.to,
+        encrypted: msg.encrypted,
+        timestamp: msg.timestamp || msg.createdAt
+      }));
+      
+      socket.emit("blockchain-logs", logs);
+      console.log("📦 Sent blockchain logs:", logs.length, "messages");
+    } catch (error) {
+      console.error("Error fetching blockchain logs:", error);
+      socket.emit("blockchain-logs", []);
+    }
+  });
+
+  socket.on("get-stats", async () => {
+    try {
+      const totalMessages = await Message.countDocuments();
+      const totalUsers = await User.countDocuments();
+      const onlineUserIds = Array.from(users.values()).map(u => u.walletAddress).filter(Boolean);
+      
+      socket.emit("stats", {
+        totalMessages,
+        totalUsers,
+        onlineUsers: onlineUserIds.length
+      });
+      console.log("📊 Sent stats - Messages:", totalMessages, "Users:", totalUsers, "Online:", onlineUserIds.length);
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+      socket.emit("stats", { totalMessages: 0, totalUsers: 0, onlineUsers: 0 });
+    }
+  });
+
   socket.on("typing", ({ to }) => {
     // Find socket ID by wallet address
     const targetSocketId = Array.from(users.entries()).find(([socketId, userData]) => userData.walletAddress === to)?.[0];
@@ -178,12 +241,16 @@ io.on("connection", (socket) => {
     console.log("📩 Encrypted message from", data.from, "to", data.to);
     console.log("🔒 Encrypted data (visible to devs):", data.encrypted.slice(0, 50), "...");
 
-    socket.emit('blockchain-data', {
+    const blockchainData = {
+      id: messageDoc._id,
       from: data.from,
       to: data.to,
       encrypted: data.encrypted,
-      timestamp: Date.now()
-    });
+      timestamp: messageDoc.timestamp || Date.now()
+    };
+
+    // Broadcast to ALL clients (including developer dashboards)
+    io.emit('blockchain-data', blockchainData);
 
     // Find socket ID by wallet address for message delivery
     const targetSocketId = Array.from(users.entries()).find(([socketId, userData]) => userData.walletAddress === data.to)?.[0];
@@ -191,12 +258,6 @@ io.on("connection", (socket) => {
     if (targetSocketId) {
       socket.to(targetSocketId).emit("receive-message", {
         from: data.from,
-        encrypted: data.encrypted,
-        timestamp: Date.now()
-      });
-      socket.to(targetSocketId).emit('blockchain-data', {
-        from: data.from,
-        to: data.to,
         encrypted: data.encrypted,
         timestamp: Date.now()
       });

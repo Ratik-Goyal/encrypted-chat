@@ -1,0 +1,47 @@
+{
+  "name": "encrypted-chat-blockchain",
+  "version": "2.0.0",
+  "description": "Blockchain-powered encrypted messaging application",
+  "main": "index.js",
+  "scripts": {
+    "setup": "npm run install:all && npm run setup:env",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install && cd ../blockchain && npm install",
+    "setup:env": "cd backend && cp .env.example .env && cd ../frontend && cp .env.example .env",
+    "ganache": "cd blockchain && npm run ganache",
+    "deploy": "cd blockchain && npm run deploy",
+    "compile": "cd blockchain && npm run compile",
+    "start:backend": "cd backend && npm start",
+    "start:frontend": "cd frontend && npm start",
+    "start:user": "cd frontend && npm run start:user",
+    "start:developer": "cd frontend && npm run start:developer",
+    "dev": "concurrently \"npm run ganache\" \"npm run start:backend\" \"npm run start:frontend\"",
+    "test": "cd blockchain && npm test"
+  },
+  "keywords": [
+    "blockchain",
+    "ethereum",
+    "encrypted-messaging",
+    "web3",
+    "ganache",
+    "smart-contracts",
+    "metamask",
+    "decentralized"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "concurrently": "^8.2.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/encrypted-chat"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3"
+  }
+}

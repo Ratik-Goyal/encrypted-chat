@@ -1,0 +1,35 @@
+{
+  "name": "blockchain",
+  "version": "1.0.0",
+  "description": "Blockchain smart contracts and scripts for SecureChat",
+  "main": "index.js",
+  "scripts": {
+    "ganache": "node scripts/start-ganache.js",
+    "compile": "npx hardhat compile",
+    "deploy": "npx hardhat run scripts/deploy.js --network ganache",
+    "deploy:solc": "node scripts/deploy-solc.js",
+    "console": "npx hardhat console --network ganache",
+    "test": "npx hardhat test",
+    "clean": "npx hardhat clean"
+  },
+  "keywords": [
+    "blockchain",
+    "ethereum",
+    "smart-contracts",
+    "solidity",
+    "ganache",
+    "hardhat"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ethers": "^6.16.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "dotenv": "^17.2.3",
+    "ganache": "^7.9.2",
+    "hardhat": "^2.22.0",
+    "solc": "^0.8.20"
+  }
+}

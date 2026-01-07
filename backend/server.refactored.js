@@ -7,7 +7,7 @@ const { validateUserRegistration, validateMessage } = require("./utils/validatio
 const Message = require("./message.model");
 const User = require("./models/User");
 const Conversation = require("./models/Conversation");
-const blockchainService = require("./blockchain.service");
+const blockchainService = require("../blockchain/blockchain.service");
 
 // Database Connection
 mongoose.connect(config.mongoUri, {
