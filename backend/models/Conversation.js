@@ -1,8 +1,21 @@
-const mongoose = require("mongoose");
+const mongoose = require("mongoose")
 
-const ConversationSchema = new mongoose.Schema({
-  participants: { type: [String], index: true },
-  lastMessageAt: { type: Date, default: Date.now }
-}, { timestamps: true });
+const conversationSchema = new mongoose.Schema(
+  {
+    participants: [
+      {
+        type: String,
+        required: true,
+      },
+    ],
+    lastMessageAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { timestamps: true },
+)
 
-module.exports = mongoose.model("Conversation", ConversationSchema);
+conversationSchema.index({ participants: 1 })
+
+module.exports = mongoose.model("Conversation", conversationSchema)

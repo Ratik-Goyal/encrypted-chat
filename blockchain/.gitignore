@@ -1,0 +1,8 @@
+node_modules/
+deployment.json
+cache/
+artifacts/
+*.log
+.env
+.env.local
+.env.*.local

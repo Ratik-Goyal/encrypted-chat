@@ -1,183 +1,112 @@
-const { ethers } = require('ethers');
-const config = require('./config');
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs")
+const path = require("path")
+const { ethers } = require(require.resolve("ethers", { paths: [path.join(__dirname, "../backend"), __dirname] }))
 
-// Load contract address from deployment.json if available
-let CONTRACT_ADDRESS = config.contractAddress || process.env.CONTRACT_ADDRESS;
-
-// Try to load from deployment.json
-try {
-  const deploymentPath = path.join(__dirname, 'deployment.json');
-  if (fs.existsSync(deploymentPath)) {
-    const deployment = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
-    CONTRACT_ADDRESS = CONTRACT_ADDRESS || deployment.contractAddress;
-    console.log('📄 Loaded contract address from deployment.json');
-  }
-} catch (error) {
-  console.log('⚠️  No deployment.json found, using environment variable');
-}
-
-const CONTRACT_ABI = [
-  "function storeMessage(address _to, bytes memory _encryptedData) public returns (uint256)",
-  "function getMessage(uint256 _messageId) public view returns (address from, address to, bytes memory encryptedData, uint256 timestamp, bytes32 messageHash)",
-  "function getUserMessages(address _user) public view returns (uint256[] memory)",
-  "function getTotalMessages() public view returns (uint256)",
-  "event MessageStored(uint256 indexed messageId, address indexed from, address indexed to, uint256 timestamp)"
-];
+const ABI = [
+  "function owner() view returns (address)",
+  "function totalBatches() view returns (uint256)",
+  "function batches(uint256) view returns (bytes32 merkleRoot, uint32 leafCount, uint64 committedAt)",
+  "function commitBatch(bytes32 merkleRoot, uint32 leafCount) returns (uint256 batchId)",
+  "event BatchCommitted(uint256 indexed batchId, bytes32 indexed merkleRoot, uint32 leafCount, uint64 committedAt)",
+]
 
 class BlockchainService {
   constructor() {
-    this.provider = null;
-    this.contract = null;
-    this.signer = null;
-    this.isInitialized = false;
+    this.provider = null
+    this.contract = null
+    this.providerUrl = null
+    this.contractAddress = null
+    this.chainId = null
   }
 
-  async initialize(providerUrl = null) {
-    const rpcUrl = providerUrl || config.blockchainRpc || 'http://localhost:8545';
-    try {
-      console.log('🔗 Connecting to blockchain:', rpcUrl);
-      this.provider = new ethers.JsonRpcProvider(rpcUrl);
-      
-      // Test connection
-      const network = await this.provider.getNetwork();
-      console.log('⛓️  Connected to chain ID:', Number(network.chainId));
-      
-      if (!CONTRACT_ADDRESS || CONTRACT_ADDRESS === '0x0000000000000000000000000000000000000000') {
-        console.warn('⚠️  Contract address not set. Please deploy contract first.');
-        console.warn('   Run: npm run deploy:contract');
-        this.isInitialized = false;
-        return;
-      }
-      
-      this.contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, this.provider);
-      console.log('📍 Contract address:', CONTRACT_ADDRESS);
-      
-      // Verify contract exists
-      const code = await this.provider.getCode(CONTRACT_ADDRESS);
-      if (code === '0x') {
-        console.error('❌ No contract found at address:', CONTRACT_ADDRESS);
-        console.error('   Please deploy the contract first');
-        this.isInitialized = false;
-        return;
-      }
-      
-      this.isInitialized = true;
-      console.log('✅ Blockchain service initialized successfully');
-    } catch (error) {
-      console.error('❌ Blockchain initialization failed:', error.message);
-      this.isInitialized = false;
+  async initialize(providerUrl, contractAddress, expectedChainId = null) {
+    const deploymentPath = path.join(__dirname, "deployment.json")
+    const deployedAddress = contractAddress || (
+      fs.existsSync(deploymentPath) && JSON.parse(fs.readFileSync(deploymentPath, "utf8")).contractAddress
+    )
+    if (!providerUrl || !deployedAddress || !ethers.isAddress(deployedAddress)) {
+      throw new Error("A blockchain RPC URL and deployed commitment contract are required")
     }
+    if (this.provider && this.contract && this.providerUrl === providerUrl && this.contractAddress === deployedAddress) {
+      if (expectedChainId && this.chainId !== expectedChainId) throw new Error("Blockchain RPC chain ID does not match configuration")
+      return true
+    }
+
+    const provider = new ethers.JsonRpcProvider(providerUrl)
+    const network = await provider.getNetwork()
+    if (expectedChainId && Number(network.chainId) !== expectedChainId) {
+      throw new Error("Blockchain RPC chain ID does not match configuration")
+    }
+    const code = await provider.getCode(deployedAddress)
+    if (code === "0x") throw new Error("No contract is deployed at the configured address")
+
+    this.provider = provider
+    this.contract = new ethers.Contract(deployedAddress, ABI, provider)
+    this.providerUrl = providerUrl
+    this.contractAddress = deployedAddress
+    this.chainId = Number(network.chainId)
+    return true
   }
 
-  async storeMessage(fromAddress, toAddress, encryptedData, privateKey) {
-    if (!this.isInitialized) {
-      console.warn('⚠️  Blockchain not initialized, skipping storage');
-      return null;
+  async commitBatch(merkleRoot, leafCount, privateKey, confirmations = 1) {
+    if (!this.contract || !this.provider) throw new Error("Blockchain service is not initialized")
+    if (!ethers.isHexString(merkleRoot, 32) || !Number.isInteger(leafCount) || leafCount < 1 || leafCount > 0xffffffff) {
+      throw new Error("Invalid batch commitment")
     }
-    
-    try {
-      console.log('📤 Storing message on blockchain...');
-      console.log('   From:', fromAddress);
-      console.log('   To:', toAddress);
-      
-      const wallet = new ethers.Wallet(privateKey, this.provider);
-      const contractWithSigner = this.contract.connect(wallet);
-      
-      // Convert encrypted data to bytes
-      const encryptedBytes = ethers.hexlify(encryptedData);
-      
-      // Send transaction
-      const tx = await contractWithSigner.storeMessage(toAddress, encryptedBytes, {
-        gasLimit: 500000 // Set gas limit for Ganache
-      });
-      
-      console.log('⏳ Transaction sent:', tx.hash);
-      const receipt = await tx.wait();
-      
-      console.log('✅ Message stored on blockchain');
-      console.log('   Block:', receipt.blockNumber);
-      console.log('   Gas used:', receipt.gasUsed.toString());
-      
-      return receipt.hash;
-    } catch (error) {
-      console.error('❌ Failed to store on blockchain:', error.message);
-      if (error.code === 'INSUFFICIENT_FUNDS') {
-        console.error('   Account has insufficient ETH for gas');
-      }
-      return null;
+    if (!privateKey) throw new Error("A commitment signer is required")
+
+    const wallet = new ethers.Wallet(privateKey, this.provider)
+    if ((await this.contract.owner()).toLowerCase() !== wallet.address.toLowerCase()) {
+      throw new Error("Commitment signer is not the contract owner")
+    }
+    const previousEvents = await this.contract.queryFilter(this.contract.filters.BatchCommitted(null, merkleRoot), 0, "latest")
+    const existing = previousEvents[previousEvents.length - 1]
+    if (existing) {
+      const batchId = Number(existing.args.batchId)
+      const batch = await this.getBatch(batchId)
+      if (batch.leafCount !== leafCount) throw new Error("The existing on-chain root has a different leaf count")
+      const receipt = await this.provider.waitForTransaction(existing.transactionHash, confirmations)
+      if (!receipt || receipt.status !== 1) throw new Error("The existing batch transaction is not confirmed")
+      return { batchId, transactionHash: receipt.hash, blockNumber: receipt.blockNumber }
+    }
+
+    const transaction = await this.contract.connect(wallet).commitBatch(merkleRoot, leafCount)
+    const receipt = await transaction.wait(confirmations)
+    const committed = receipt.logs
+      .map((log) => { try { return this.contract.interface.parseLog(log) } catch { return null } })
+      .find((event) => event?.name === "BatchCommitted" && event.args.merkleRoot.toLowerCase() === merkleRoot.toLowerCase())
+    if (!committed) throw new Error("The blockchain did not emit the expected batch commitment")
+    return {
+      batchId: Number(committed.args.batchId),
+      transactionHash: receipt.hash,
+      blockNumber: receipt.blockNumber,
     }
   }
 
-  async getMessage(messageId) {
-    if (!this.isInitialized) {
-      return null;
-    }
-    
-    try {
-      const message = await this.contract.getMessage(messageId);
-      return {
-        from: message[0],
-        to: message[1],
-        encryptedData: message[2],
-        timestamp: Number(message[3]),
-        messageHash: message[4]
-      };
-    } catch (error) {
-      console.error('❌ Failed to get message:', error.message);
-      return null;
+  async getBatch(batchId) {
+    if (!this.contract) throw new Error("Blockchain service is not initialized")
+    const batch = await this.contract.batches(batchId)
+    return {
+      merkleRoot: batch.merkleRoot,
+      leafCount: Number(batch.leafCount),
+      committedAt: Number(batch.committedAt),
     }
   }
 
-  async getUserMessages(userAddress) {
-    if (!this.isInitialized) {
-      return [];
-    }
-    
-    try {
-      const messageIds = await this.contract.getUserMessages(userAddress);
-      return messageIds.map(id => Number(id));
-    } catch (error) {
-      console.error('❌ Failed to get user messages:', error.message);
-      return [];
-    }
+  async getTotalBatches() {
+    if (!this.contract) throw new Error("Blockchain service is not initialized")
+    return Number(await this.contract.totalBatches())
   }
 
-  async getTotalMessages() {
-    if (!this.isInitialized) {
-      return 0;
-    }
-    
-    try {
-      const total = await this.contract.getTotalMessages();
-      return Number(total);
-    } catch (error) {
-      console.error('❌ Failed to get total messages:', error.message);
-      return 0;
-    }
-  }
-
-  // Get blockchain info
   async getBlockchainInfo() {
-    if (!this.provider) {
-      return null;
-    }
-    
-    try {
-      const network = await this.provider.getNetwork();
-      const blockNumber = await this.provider.getBlockNumber();
-      
-      return {
-        chainId: Number(network.chainId),
-        blockNumber,
-        contractAddress: CONTRACT_ADDRESS,
-        isInitialized: this.isInitialized
-      };
-    } catch (error) {
-      return null;
+    if (!this.provider || !this.contract) throw new Error("Blockchain service is not initialized")
+    const network = await this.provider.getNetwork()
+    return {
+      chainId: Number(network.chainId),
+      blockNumber: await this.provider.getBlockNumber(),
+      contractAddress: await this.contract.getAddress(),
     }
   }
 }
 
-module.exports = new BlockchainService();
+module.exports = new BlockchainService()

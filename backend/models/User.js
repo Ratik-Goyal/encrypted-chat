@@ -1,16 +1,102 @@
-const mongoose = require("mongoose");
+const mongoose = require("mongoose")
 
-const UserSchema = new mongoose.Schema({
-  walletAddress: { type: String, unique: true, index: true },
-  publicKey: { type: String, required: true },
-  username: { type: String, required: true },
-  email: { type: String, required: true },
-  userId: { type: String, index: true }, // Unique user identifier like @username_1234
-  lastSeen: { type: Date, default: Date.now },
-  profilePicture: { type: String, default: '' }, // URL or base64 data
-  status: { type: String, default: 'Hey there! I am using SecureChat' }, // Status message
-  bio: { type: String, default: '' },
-  isOnline: { type: Boolean, default: false }
-}, { timestamps: true });
+const userSchema = new mongoose.Schema(
+  {
+    walletAddress: {
+      type: String,
+      sparse: true,
+      lowercase: true,
+    },
+    publicKey: {
+      type: String,
+    },
+    username: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      lowercase: true,
+      minlength: 3,
+      maxlength: 30,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+    password: {
+      type: String,
+      required: true,
+    },
+    role: {
+      type: String,
+      enum: ["user", "admin"],
+      default: "user",
+      required: true,
+    },
+    tokenVersion: {
+      type: Number,
+      default: 0,
+    },
+    privacy: {
+      showOnlineStatus: { type: Boolean, default: true },
+      readReceipts: { type: Boolean, default: true },
+      typingIndicator: { type: Boolean, default: true },
+    },
+    userId: {
+      type: String,
+      unique: true,
+      required: true,
+    },
+    profilePicture: {
+      type: String,
+      default: "",
+    },
+    status: {
+      type: String,
+      enum: ["online", "offline", "idle", "dnd"],
+      default: "offline",
+    },
+    bio: {
+      type: String,
+      default: "",
+      maxlength: 500,
+    },
+    isOnline: {
+      type: Boolean,
+      default: false,
+    },
+    lastSeen: {
+      type: Date,
+      default: Date.now,
+    },
+    friends: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    friendRequests: [
+      {
+        from: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        status: {
+          type: String,
+          enum: ["pending", "accepted", "rejected"],
+          default: "pending",
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+  },
+  { timestamps: true },
+)
 
-module.exports = mongoose.model("User", UserSchema);
+module.exports = mongoose.model("User", userSchema)

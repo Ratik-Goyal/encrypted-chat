@@ -1,54 +1,47 @@
-const { AppError } = require('./errorHandler');
-
 const validateEmail = (email) => {
-  const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return regex.test(email);
-};
+  if (typeof email !== "string" || email.length > 254) return false
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email)
+}
 
 const validateUsername = (username) => {
-  return username && username.length >= 3 && username.length <= 30;
-};
+  return typeof username === "string" && /^[a-zA-Z0-9_.-]{3,30}$/.test(username.trim())
+}
 
 const validateMessage = (message) => {
-  return message && Array.isArray(message) && message.length > 0;
-};
+  return message && message.trim().length > 0
+}
 
 const sanitizeInput = (input) => {
-  if (typeof input !== 'string') return input;
-  return input.trim().replace(/[<>]/g, '');
-};
+  if (typeof input !== "string") return input
+  return input.trim().replace(/[<>]/g, "")
+}
 
 const validateUserRegistration = (data) => {
-  const { username, email, publicKey, walletAddress } = data;
-  
-  if (!username || !validateUsername(username)) {
-    throw new AppError('Username must be 3-30 characters', 400);
+  const errors = []
+
+  if (!data.username || !validateUsername(data.username)) {
+    errors.push("Username must be 3-30 characters")
   }
-  
-  if (!email || !validateEmail(email)) {
-    throw new AppError('Invalid email address', 400);
+
+  if (!validateEmail(data.email)) {
+    errors.push("Invalid email format")
   }
-  
-  if (!publicKey || publicKey.length < 100) {
-    throw new AppError('Invalid public key', 400);
+
+  if (typeof data.password !== "string" || data.password.length < 12 || Buffer.byteLength(data.password, "utf8") > 72) {
+    errors.push("Password must be 12-72 UTF-8 bytes")
   }
-  
-  if (!walletAddress) {
-    throw new AppError('Wallet address required', 400);
-  }
-  
+
   return {
-    username: sanitizeInput(username),
-    email: sanitizeInput(email),
-    publicKey,
-    walletAddress
-  };
-};
+    isValid: errors.length === 0,
+    errors,
+  }
+}
 
 module.exports = {
   validateEmail,
   validateUsername,
   validateMessage,
   sanitizeInput,
-  validateUserRegistration
-};
+  validateUserRegistration,
+}

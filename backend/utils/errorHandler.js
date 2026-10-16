@@ -1,37 +1,39 @@
+const Logger = require("./logger")
+const { emitSocketEvent } = require("./socket-events")
+
 class AppError extends Error {
-  constructor(message, statusCode) {
-    super(message);
-    this.statusCode = statusCode;
-    this.isOperational = true;
-    Error.captureStackTrace(this, this.constructor);
+  constructor(message, statusCode = 500, isOperational = true) {
+    super(message)
+    this.statusCode = statusCode
+    this.isOperational = isOperational
+    Error.captureStackTrace(this, this.constructor)
   }
 }
 
-const errorHandler = (err, socket) => {
-  const statusCode = err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
-  
-  console.error(`❌ Error [${statusCode}]:`, message);
-  
-  if (err.stack && process.env.NODE_ENV === 'development') {
-    console.error(err.stack);
+const errorHandler = (error, socket) => {
+  Logger.error("Socket request failed:", error.statusCode || 500)
+
+  if (error.isOperational) {
+    emitSocketEvent(socket, "error", {
+      message: error.message,
+      statusCode: error.statusCode,
+    })
+  } else {
+    emitSocketEvent(socket, "error", {
+      message: "An unexpected error occurred",
+      statusCode: 500,
+    })
   }
-  
-  socket.emit('error', {
-    message: err.isOperational ? message : 'Something went wrong',
-    statusCode
-  });
-};
+}
 
 const asyncHandler = (fn) => {
   return async (...args) => {
     try {
-      await fn(...args);
+      await fn(...args)
     } catch (error) {
-      const socket = args[0];
-      errorHandler(error, socket);
+      errorHandler(error, args[0])
     }
-  };
-};
+  }
+}
 
-module.exports = { AppError, errorHandler, asyncHandler };
+module.exports = { AppError, errorHandler, asyncHandler }
